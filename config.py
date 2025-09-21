@@ -46,10 +46,24 @@ class Config:
     TRACK_NAME_FORMAT    = getenv("TRACK_NAME_FORMAT", "{title} - {artist}")    
                                                                             # e.g. "{title} - {artist}"
 
-    # Rclone/Index Configuration
+    # Uploader Configuration (GDrive & Rclone)
+    DEFAULT_UPLOAD    = getenv("DEFAULT_UPLOAD", "telegram").lower()       # 'telegram', 'rclone', or 'gdrive'
+
+    # GDrive Configuration
+    GDRIVE_ID         = getenv("GDRIVE_ID")                                # GDrive folder ID
+    IS_TEAM_DRIVE     = getenv("IS_TEAM_DRIVE", "False").lower() == "true" # True or False
+    USE_SERVICE_ACCOUNTS = getenv("USE_SERVICE_ACCOUNTS", "False").lower() == "true" # True or False
+    STOP_DUPLICATE    = getenv("STOP_DUPLICATE", "False").lower() == "true" # True or False
+    INDEX_URL         = getenv("INDEX_URL")                                # Optional index base URL
+
+    # Rclone Configuration
     RCLONE_CONFIG     = getenv("RCLONE_CONFIG")                            # Path or URL to rclone.conf
-    RCLONE_DEST       = getenv("RCLONE_DEST")                              # e.g. "remote:AppleMusic"
-    INDEX_LINK        = getenv("INDEX_LINK")                               # Optional index base URL
+    RCLONE_PATH       = getenv("RCLONE_PATH")                              # Default rclone path
+    RCLONE_FLAGS      = getenv("RCLONE_FLAGS")                             # Custom rclone flags
+    RCLONE_SERVE_URL  = getenv("RCLONE_SERVE_URL")                         # URL for rclone serve
+    RCLONE_SERVE_PORT = int(getenv("RCLONE_SERVE_PORT", 8080))             # Port for rclone serve
+    RCLONE_SERVE_USER = getenv("RCLONE_SERVE_USER")                        # Username for rclone serve
+    RCLONE_SERVE_PASS = getenv("RCLONE_SERVE_PASS")                        # Password for rclone serve
 
     # Qobuz Configuration
     QOBUZ_EMAIL       = getenv("QOBUZ_EMAIL")                              # User email (string)

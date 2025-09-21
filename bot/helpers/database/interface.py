@@ -29,11 +29,13 @@ class AbstractUserSettingsRepo(ABC):
     """Abstract repository for per-user settings."""
 
     @abstractmethod
-    def set_user_setting(self, user_id: int, setting_name: str, setting_value: Any) -> None:
+    def set_user_setting(self, user_id: int, setting_name: str, setting_value: Any, is_blob: bool = False) -> None:
+        """Sets a setting for a user. Can be a simple value or a blob."""
         raise NotImplementedError
 
     @abstractmethod
-    def get_user_setting(self, user_id: int, setting_name: str) -> Optional[Any]:
+    def get_user_setting(self, user_id: int, setting_name: str) -> Tuple[Optional[Any], Optional[bytes]]:
+        """Gets a setting for a user, returning both simple value and blob if available."""
         raise NotImplementedError
 
 class AbstractRcloneSessionsRepo(ABC):

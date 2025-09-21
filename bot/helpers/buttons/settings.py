@@ -37,6 +37,15 @@ def main_menu():
                 callback_data='rclonePanel'
             )
         ])
+
+    # Add the new Uploader Settings button
+    inline_keyboard.append([
+        InlineKeyboardButton(
+            text="Uploader Settings",
+            callback_data='uploaderPanel'
+        )
+    ])
+
     inline_keyboard += close_button
     return InlineKeyboardMarkup(inline_keyboard)
 

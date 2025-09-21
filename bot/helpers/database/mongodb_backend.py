@@ -77,14 +77,26 @@ class MongoUserSettingsRepo(AbstractUserSettingsRepo):
         self._collection: Collection = db_client[db_name]["user_settings"]
         self._collection.create_index([("user_id", ASCENDING), ("setting_name", ASCENDING)], unique=True)
 
-    def set_user_setting(self, user_id: int, setting_name: str, setting_value: Any) -> None:
+    def set_user_setting(self, user_id: int, setting_name: str, setting_value: Any, is_blob: bool = False) -> None:
         query = {"user_id": user_id, "setting_name": setting_name}
-        update = {"$set": {"setting_value": setting_value}}
+        update = {
+            "$set": {
+                "setting_value": setting_value,
+                "is_blob": is_blob
+            }
+        }
         self._collection.update_one(query, update, upsert=True)
 
-    def get_user_setting(self, user_id: int, setting_name: str) -> Optional[Any]:
+    def get_user_setting(self, user_id: int, setting_name: str) -> Tuple[Optional[Any], Optional[bytes]]:
         doc = self._collection.find_one({"user_id": user_id, "setting_name": setting_name})
-        return doc.get("setting_value") if doc else None
+        if not doc:
+            return None, None
+
+        is_blob = doc.get("is_blob", False)
+        if is_blob:
+            return None, doc.get("setting_value")
+        else:
+            return doc.get("setting_value"), None
 
 class MongoRcloneSessionsRepo(AbstractRcloneSessionsRepo):
     def __init__(self, db_client: MongoClient, db_name: str):

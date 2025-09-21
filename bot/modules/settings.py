@@ -589,6 +589,14 @@ async def main_menu_cb(client, cb:CallbackQuery):
         except:
             pass
 
+@Client.on_callback_query(filters.regex(pattern=r"^uploaderPanel"))
+async def uploader_panel_cb(client, cb:CallbackQuery):
+    if await check_user(cb.from_user.id, restricted=True):
+        from .uploader_settings import uploader_settings_command
+        # We need to "send" a new message, so we pass the callback's message object
+        await uploader_settings_command(client, cb.message)
+        await cb.message.delete() # delete the old settings panel
+
 @Client.on_callback_query(filters.regex(pattern=r"^close"))
 async def close_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):

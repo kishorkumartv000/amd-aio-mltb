@@ -113,6 +113,38 @@ sudo docker run -d --env-file .env --name siesta project-siesta
 - `PLAYLIST_NAME_FORMAT` - Similar to `TRACK_NAME_FORMAT` but for Playlists (Note: all tags might not be available) `(str)`
 - `TIDAL_NG_DOWNLOAD_PATH` - Overrides the download path for the Tidal NG provider. If set, all Tidal NG downloads will be saved here, bypassing other settings. `(str)`
 
+## Cloud Uploader (Google Drive & Rclone)
+
+This bot now integrates advanced upload functionalities, allowing you to send downloaded music directly to Google Drive or any Rclone-compatible cloud storage.
+
+### How to Use the New Uploader
+
+The new features are managed through a simple, interactive menu.
+
+1.  **Access the Settings:**
+    *   Start by sending the `/uploadersettings` or `/usettings` command to the bot.
+    *   This will open the new "Uploader Settings" panel.
+
+2.  **Configure Your Upload Destination:**
+    *   **Set Default Uploader:** In the settings panel, you will see a button to "Set Default Uploader". You can choose between `Telegram`, `Google Drive`, and `Rclone`. This choice is saved on a per-user basis.
+    *   **Configure Google Drive:** Click "GDrive Settings", and the bot will ask you to upload your `token.pickle` file. This file authorizes the bot to upload to your Google Drive. You can create it using the `generate_drive_token.py` script.
+    *   **Configure Rclone:** Click "Rclone Settings", and the bot will ask you to upload your `rclone.conf` file, which contains your Rclone remote configurations.
+
+3.  **Download as Usual:**
+    *   Once you have configured your preferred uploader, simply use the `/download` command as you normally would.
+    *   The bot will automatically check your setting and upload the downloaded files to your chosen destination.
+
+### Technical Implementation & Advanced Features
+
+*   **Modular Uploader:** The uploader system in `bot/helpers/uploader.py` has been refactored to use a central `upload_item` router function. This function directs the upload to the correct backend (Telegram, GDrive, or Rclone).
+*   **Database Integration:** The database schema has been updated to store user-specific configuration files (`rclone.conf` and `token.pickle`) as binary data. This works for both **PostgreSQL and MongoDB**.
+*   **Service Accounts (GDrive):** The integration includes support for Google Drive Service Accounts. To use them:
+    1.  Generate the service account `.json` files using the `gen_sa_accounts.py` script.
+    2.  Place the generated `accounts` folder in the root directory of the bot.
+    3.  Set the `USE_SERVICE_ACCOUNTS=True` variable in your `.env` file.
+*   **Multi-Drive Support (GDrive):** The GDrive search and list features support searching across multiple drives. Use the `driveid.py` script to create a `list_drives.txt` file to configure this.
+*   **Helper Scripts:** The root directory now contains `generate_drive_token.py`, `gen_sa_accounts.py`, `add_to_team_drive.py`, and `driveid.py` to help you manage your Google Drive credentials and configurations. You may need to install their specific dependencies from `requirements-cli.txt` to run them (`pip install -r requirements-cli.txt`).
+
 ## CREDITS
 - OrpheusDL - https://github.com/yarrm80s/orpheusdl
 - Streamrip - https://github.com/nathom/streamrip
@@ -283,6 +315,8 @@ This build is Apple Music–only. Qobuz, Tidal, and Deezer integrations have bee
     ```
 /cancel_all
     ```
+- /clone <gdrive_link>: Copy a file or folder within Google Drive.
+- /count <gdrive_link>: Count the files and folders in a Google Drive path.
 
 ### Core Settings Panel
 
@@ -366,12 +400,16 @@ Note: If the Apple downloader runs persistently, restart it after updating criti
 start - Start the bot
 help - Show help
 settings - Open settings panel
+uploadersettings - Configure GDrive/Rclone uploaders
+usettings - Alias for /uploadersettings
 download - Start a download
 queue - Show your queue
 qqueue - Show your queue (alias)
 qcancel - Cancel a queued item by Queue ID
 cancel - Cancel a running task by ID
 cancel_all - Cancel all your running tasks
+clone - Copy a file/folder in Google Drive
+count - Count files/folders in a Google Drive path
 config - Config help for Apple Music YAML
 config_show - Show config values (or specific keys)
 config_get - Get a single config value

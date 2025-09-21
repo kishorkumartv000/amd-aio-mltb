@@ -135,38 +135,59 @@ class PostgresUserSettingsRepo(AbstractUserSettingsRepo):
             user_id BIGINT NOT NULL,
             setting_name VARCHAR(50) NOT NULL,
             setting_value VARCHAR(2000),
+            setting_blob BYTEA DEFAULT NULL,
+            is_blob BOOLEAN DEFAULT FALSE,
             UNIQUE(user_id, setting_name)
         )"""
         cur = self._db.scur()
         try:
             cur.execute(schema)
+            # Add setting_blob column if it doesn't exist (for migration)
+            cur.execute("ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS setting_blob BYTEA DEFAULT NULL;")
+            cur.execute("ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS is_blob BOOLEAN DEFAULT FALSE;")
         finally:
             self._db.ccur(cur)
 
-    def set_user_setting(self, user_id: int, setting_name: str, setting_value: Any) -> None:
-        sql = """
-        INSERT INTO user_settings (user_id, setting_name, setting_value)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (user_id, setting_name)
-        DO UPDATE SET setting_value = EXCLUDED.setting_value;
-        """
+    def set_user_setting(self, user_id: int, setting_name: str, setting_value: Any, is_blob: bool = False) -> None:
+        if is_blob:
+            sql = """
+            INSERT INTO user_settings (user_id, setting_name, setting_blob, is_blob)
+            VALUES (%s, %s, %s, TRUE)
+            ON CONFLICT (user_id, setting_name)
+            DO UPDATE SET setting_blob = EXCLUDED.setting_blob, is_blob = TRUE, setting_value = NULL;
+            """
+            params = (user_id, setting_name, setting_value)
+        else:
+            sql = """
+            INSERT INTO user_settings (user_id, setting_name, setting_value, is_blob)
+            VALUES (%s, %s, %s, FALSE)
+            ON CONFLICT (user_id, setting_name)
+            DO UPDATE SET setting_value = EXCLUDED.setting_value, is_blob = FALSE, setting_blob = NULL;
+            """
+            params = (user_id, setting_name, str(setting_value))
+
         cur = self._db.scur()
         try:
-            cur.execute(sql, (user_id, setting_name, str(setting_value)))
+            cur.execute(sql, params)
         finally:
             self._db.ccur(cur)
 
-    def get_user_setting(self, user_id: int, setting_name: str) -> Optional[Any]:
-        sql = "SELECT setting_value FROM user_settings WHERE user_id = %s AND setting_name = %s"
-        cur = self._db.scur()
+    def get_user_setting(self, user_id: int, setting_name: str) -> Tuple[Optional[Any], Optional[bytes]]:
+        sql = "SELECT setting_value, setting_blob, is_blob FROM user_settings WHERE user_id = %s AND setting_name = %s"
+        cur = self._db.scur(dictcur=True)
         val = None
+        blob_val = None
         try:
             cur.execute(sql, (user_id, setting_name))
             if cur.rowcount > 0:
-                val = cur.fetchone()[0]
+                row = cur.fetchone()
+                if row['is_blob']:
+                    blob_val = row['setting_blob']
+                else:
+                    val = row['setting_value']
         finally:
             self._db.ccur(cur)
-        return val
+        return val, blob_val
 
 class PostgresRcloneSessionsRepo(AbstractRcloneSessionsRepo):
     def __init__(self, db_handle: DataBaseHandle):
