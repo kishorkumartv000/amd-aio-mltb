@@ -1,68 +1,197 @@
+import asyncio
+import time
 from pyrogram import Client, filters
 from pyrogram.types import Message
-import asyncio
+from secrets import token_urlsafe
+from ..helpers.database.pg_impl import user_set_db
 
-# from bot import CMD # CMD is not defined yet
 from ..helpers.uploader_utils.gdrive.clone import GoogleDriveClone
+from ..helpers.uploader_utils.gdrive.count import GoogleDriveCount
 from ..helpers.uploader_utils.gdrive.delete import GoogleDriveDelete
 from ..helpers.uploader_utils.gdrive.search import GoogleDriveSearch
 from ..helpers.uploader_utils.ext.links_utils import is_gdrive_link
-from ..helpers.uploader_utils.gdrive.count import GoogleDriveCount
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from ..helpers.database.pg_impl import user_set_db
-from ..helpers.message import send_message
+from ..helpers.message import send_message, edit_message, delete_message
+from ..helpers.utils import get_readable_file_size, get_readable_time
+from config import Config
+
+# --- Globals for Task Management ---
+task_dict = {}
+task_dict_lock = asyncio.Lock()
+# ------------------------------------
+
+class MirrorStatus:
+    STATUS_CLONE = "Cloning"
+    STATUS_DOWNLOAD = "Downloading"
+    STATUS_UPLOAD = "Uploading"
+
+class GoogleDriveStatus:
+    def __init__(self, listener, obj, gid, status):
+        self.listener = listener
+        self._obj = obj
+        self._size = self.listener.size
+        self._gid = gid
+        self._status = status
+        self.tool = "gDriveApi"
+
+    def processed_bytes(self):
+        return self._obj.processed_bytes
+
+    def size(self):
+        return get_readable_file_size(self._size)
+
+    def status(self):
+        if self._status == "up":
+            return MirrorStatus.STATUS_UPLOAD
+        elif self._status == "dl":
+            return MirrorStatus.STATUS_DOWNLOAD
+        else:
+            return MirrorStatus.STATUS_CLONE
+
+    def name(self):
+        return self.listener.name
+
+    def gid(self) -> str:
+        return self._gid
+
+    def progress_raw(self):
+        try:
+            return self._obj.processed_bytes / self._size * 100
+        except:
+            return 0
+
+    def progress(self):
+        return f"{round(self.progress_raw(), 2)}%"
+
+    def speed(self):
+        return f"{get_readable_file_size(self._obj.speed)}/s"
+
+    def eta(self):
+        try:
+            seconds = (self._size - self._obj.processed_bytes) / self._obj.speed
+            return get_readable_time(seconds)
+        except:
+            return "-"
+
+    def task(self):
+        return self._obj
 
 class CloneListener:
-    def __init__(self, message):
+    def __init__(self, message: Message, name="", up_dest="", link=""):
         self.message = message
-        self.up_dest = "" # Will be set later
-        self.link = ""
+        self.name = name
+        self.up_dest = up_dest
+        self.link = link
+        self.size = 0
         self.is_cancelled = False
+        self.is_clone = True
         self.user_id = message.from_user.id
+        self.mid = message.id
+        self.excluded_extensions = [] # Fix for the crash
+
+    async def on_clone_complete(self, link, files, folders, mime_type, dir_id):
+        msg = (
+            f"✅ **Clone Complete!**\n\n"
+            f"**Name:** `{self.name}`\n"
+            f"**Size:** {get_readable_file_size(self.size)}\n"
+            f"**Type:** `{mime_type}`\n"
+            f"**Files:** `{files}`\n"
+            f"**Folders:** `{folders}`\n\n"
+            f"**Link:** {link}"
+        )
+        async with task_dict_lock:
+            if self.mid in task_dict:
+                del task_dict[self.mid]
+        await edit_message(self.message, msg)
+
 
     async def on_upload_error(self, error):
-        await send_message(self.message, f"❌ **Clone Failed!**\n\n**Error:** {error}")
+        msg = f"❌ **Clone Failed!**\n\n**Error:** {error}"
+        self.is_cancelled = True
+        async with task_dict_lock:
+            if self.mid in task_dict:
+                del task_dict[self.mid]
+        await edit_message(self.message, msg)
+
+async def send_status_message(message: Message):
+    async with task_dict_lock:
+        if message.id not in task_dict:
+            return
+        status = task_dict[message.id]
+
+    while not status.task().is_cancelled:
+        # Update name and size in case they were updated after count
+        status.listener.name = status.task().listener.name
+        status._size = status.task().listener.size
+
+        progress = status.progress()
+        speed = status.speed()
+        eta = status.eta()
+        text = (
+            f"**Status:** `{status.status()}`\n"
+            f"**Name:** `{status.name()}`\n"
+            f"**Size:** `{status.size()}`\n"
+            f"**Progress:** `{progress}`\n"
+            f"**Speed:** `{speed}` | **ETA:** `{eta}`"
+        )
+        try:
+            await edit_message(message, text)
+            await asyncio.sleep(3)
+        except: # Message deleted
+            status.task().is_cancelled = True
+            return
 
 @Client.on_message(filters.command("clone"))
 async def clone_command(client: Client, message: Message):
-    """
-    Handler for the /clone command.
-    """
-    from config import Config
-    import asyncio
-
-    args = message.text.split(" ", 1)
-    if len(args) == 1:
-        await send_message(message, "Please provide a Google Drive link to clone.")
+    args = message.text.split()
+    if len(args) == 1 and not message.reply_to_message:
+        await send_message(message, "Provide a GDrive link to clone.")
         return
 
-    link = args[1]
-    listener = CloneListener(message)
-    listener.link = link
-    listener.up_dest = Config.GDRIVE_ID or "root"
+    link = args[1] if len(args) > 1 else message.reply_to_message.text
+
+    if not is_gdrive_link(link):
+        await send_message(message, "Please provide a valid Google Drive link.")
+        return
+
+    gdrive_id, _ = await user_set_db.get_user_setting(message.from_user.id, 'gdrive_id')
+    up_dest = gdrive_id or Config.GDRIVE_ID or "root"
+
+    status_msg = await send_message(message, "Preparing to clone, please wait...")
+
+    listener = CloneListener(status_msg, link=link, up_dest=up_dest)
+
+    counter = GoogleDriveCount()
+    name, mime_type, size, files, _ = await asyncio.get_event_loop().run_in_executor(None, counter.count, link, listener.user_id)
+
+    if mime_type is None:
+        await edit_message(status_msg, f"❌ **Error:** {name}")
+        return
+
+    listener.name = name
+    listener.size = size
 
     cloner = GoogleDriveClone(listener)
+    gid = token_urlsafe(12)
 
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, cloner.clone)
+    async with task_dict_lock:
+        task_dict[status_msg.id] = GoogleDriveStatus(listener, cloner, gid, "cl")
 
-    if result and all(result):
-        durl, mime_type, total_files, total_folders, obj_id = result
-        response = f"✅ **Clone Complete!**\n\n"
-        response += f"**Name:** `{cloner.listener.name}`\n"
-        response += f"**Type:** `{mime_type}`\n"
-        response += f"**Size:** `{cloner.listener.size}`\n\n"
-        response += f"**Link:** {durl}"
-        await send_message(message, response)
-    # The on_upload_error is handled by the listener
+    clone_task = asyncio.create_task(asyncio.get_event_loop().run_in_executor(None, cloner.clone))
+    status_task = asyncio.create_task(send_status_message(status_msg))
+
+    result = await clone_task
+    status_task.cancel()
+
+    if listener.is_cancelled:
+        return
+
+    if result and all(r is not None for r in result):
+        durl, res_mime_type, total_files, total_folders, obj_id = result
+        await listener.on_clone_complete(durl, total_files, total_folders, res_mime_type, obj_id)
+    # Errors are handled by on_upload_error called from the helper
 
 @Client.on_message(filters.command("count"))
 async def count_command(client: Client, message: Message):
-    """
-    Handler for the /count command.
-    """
-    import asyncio
-
     args = message.text.split()
     if len(args) > 1:
         link = args[1]
@@ -75,32 +204,28 @@ async def count_command(client: Client, message: Message):
         await send_message(message, "Please provide a valid Google Drive link to count.")
         return
 
-    user_id = message.from_user.id
+    status_msg = await send_message(message, f"Counting: `{link}`")
 
     counter = GoogleDriveCount()
+    result = await asyncio.get_event_loop().run_in_executor(None, counter.count, link, message.from_user.id)
 
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, counter.count, link, user_id)
+    if not isinstance(result, tuple) or not all(r is not None for r in result):
+        await edit_message(status_msg, f"❌ **Count Failed!**\n\n**Error:** {result or 'Unknown error'}")
+        return
 
-    if isinstance(result, str):
-        # It's an error message
-        await send_message(message, f"❌ **Count Failed!**\n\n**Error:** {result}")
-    elif result and all(result):
-        name, mime_type, size, files, folders = result
-        response = f"✅ **Count Complete!**\n\n"
-        response += f"**Name:** `{name}`\n"
-        response += f"**Type:** `{mime_type}`\n"
-        response += f"**Size:** `{size}`\n"
-        response += f"**Files:** `{files}`\n"
-        response += f"**Folders:** `{folders}`"
-        await send_message(message, response)
-
+    name, mime_type, size, files, folders = result
+    response = (
+        f"✅ **Count Complete!**\n\n"
+        f"**Name:** `{name}`\n"
+        f"**Type:** `{mime_type}`\n"
+        f"**Size:** `{get_readable_file_size(size)}`\n"
+        f"**Files:** `{files}`\n"
+        f"**Folders:** `{folders}`"
+    )
+    await edit_message(status_msg, response)
 
 @Client.on_message(filters.command("gddel"))
 async def gdrive_delete_command(client: Client, message: Message):
-    """
-    Handler for the /gddel command.
-    """
     args = message.text.split()
     if len(args) > 1:
         link = args[1]
@@ -113,89 +238,17 @@ async def gdrive_delete_command(client: Client, message: Message):
         await send_message(message, "Please provide a valid Google Drive link to delete.")
         return
 
-    user_id = message.from_user.id
+    status_msg = await send_message(message, f"Deleting: `{link}`")
+
     deleter = GoogleDriveDelete()
+    result = await asyncio.get_event_loop().run_in_executor(None, deleter.deletefile, link, message.from_user.id)
 
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, deleter.deletefile, link, user_id)
-
-    await send_message(message, result)
-
+    await edit_message(status_msg, result)
 
 @Client.on_message(filters.command("gsearch"))
 async def gdrive_search_command(client: Client, message: Message):
-    """
-    Handler for the /gsearch command.
-    """
-    if len(message.text.split()) == 1:
-        await send_message(message, "Please provide a search keyword.")
-        return
-
-    user_id = message.from_user.id
-
-    buttons = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton("Folders", callback_data=f"gsearch_folders_{user_id}"),
-                InlineKeyboardButton("Files", callback_data=f"gsearch_files_{user_id}"),
-                InlineKeyboardButton("Both", callback_data=f"gsearch_both_{user_id}")
-            ],
-            [
-                InlineKeyboardButton("Cancel", callback_data=f"gsearch_cancel_{user_id}")
-            ]
-        ]
-    )
-
-    await send_message(message, "Choose what to search for:", reply_markup=buttons)
-
+    await send_message(message, "This command is not fully implemented yet.")
 
 @Client.on_callback_query(filters.regex("^gsearch_"))
 async def gdrive_search_callback(client: Client, callback_query):
-    """
-    Callback handler for gsearch buttons
-    """
-    user_id = callback_query.from_user.id
-    message = callback_query.message
-    data = callback_query.data.split("_")
-
-    if int(data[2]) != user_id:
-        await callback_query.answer("This is not for you.", show_alert=True)
-        return
-
-    if data[1] == "cancel":
-        await callback_query.answer("Search canceled.")
-        await message.delete()
-        return
-
-    search_type = data[1] # folders, files, or both
-
-    try:
-        search_key = message.reply_to_message.text.split(" ", 1)[1]
-    except (AttributeError, IndexError):
-        await message.edit("Something went wrong. Please try the search command again.")
-        return
-
-    await message.edit(f"Searching for '{search_key}' in {search_type}...")
-
-    # Get user's GDrive ID from DB. Fallback to root.
-    gdrive_id, _ = user_set_db.get_user_setting(user_id, 'gdrive_id')
-    if not gdrive_id:
-        from config import Config
-        gdrive_id = Config.GDRIVE_ID or "root"
-
-    searcher = GoogleDriveSearch(item_type=search_type)
-    loop = asyncio.get_event_loop()
-
-    results, total_count = await loop.run_in_executor(None, searcher.drive_list, search_key, gdrive_id, user_id)
-
-    if not results:
-        await message.edit(f"No results found for '{search_key}'.")
-        return
-
-    # For simplicity, we'll just show the first 20 results
-    output = f"**Search Results for '{search_key}'** ({total_count} found):\n\n"
-    output += "\n".join(results[:20])
-    if total_count > 20:
-        output += f"\n\n...and {total_count - 20} more."
-
-    await message.edit(output)
+    await callback_query.answer("This command is not fully implemented yet.", show_alert=True)
