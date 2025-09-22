@@ -10,6 +10,7 @@ from mutagen.mp4 import MP4
 import re
 from bot.settings import bot_set
 from bot.helpers.progress import ProgressReporter
+from .database.pg_impl import db
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 # --- Uploader Listener ---
@@ -33,7 +34,6 @@ class UploaderListener:
 
 async def gdrive_upload(user, path, name):
     """Upload files via Google Drive using the global token.pickle."""
-    from .database.pg_impl import db
     from .uploader_utils.gdrive.upload import GoogleDriveUpload
 
     user_id = user['user_id']
@@ -81,7 +81,6 @@ async def gdrive_upload(user, path, name):
 
 async def rclone_upload(user, path, name):
     """Upload files via Rclone using the global rclone.conf."""
-    from .database.pg_impl import db
     from .uploader_utils.rclone.transfer import RcloneTransferHelper
 
     user_id = user['user_id']
@@ -214,11 +213,10 @@ async def upload_item(user, metadata, content_type, index=None, total=None):
     """
     Routes the upload to the correct destination based on user settings.
     """
-    from .database.pg_impl import user_set_db
     user_id = user['user_id']
     
     # Get user's preferred uploader, falling back to config, then to telegram
-    uploader, _ = user_set_db.get_user_setting(user_id, 'default_uploader')
+    uploader, _ = db.user_settings.get_user_setting(user_id, 'default_uploader')
     uploader = uploader or Config.DEFAULT_UPLOAD or 'telegram'
 
     path = metadata.get('filepath') or metadata.get('folderpath')
@@ -230,10 +228,6 @@ async def upload_item(user, metadata, content_type, index=None, total=None):
         await rclone_upload(user, path, name)
     else: # Default to Telegram
         await _telegram_upload(user, metadata, content_type, index, total)
-
-    # Cleanup is now handled by the individual uploader functions (gdrive_upload, rclone_upload)
-    # to ensure self-contained and reliable behavior.
-
 
 # --- Original Upload Functions (Refactored) ---
 
