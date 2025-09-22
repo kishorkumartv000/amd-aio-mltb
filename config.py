@@ -9,8 +9,8 @@ logging.basicConfig(
 )
 LOGGER = logging.getLogger(__name__)
 
-if not os.environ.get("ENV"):
-    load_dotenv('.env', override=True)
+# Load .env file. System environment variables will override .env variables.
+load_dotenv('.env')
 
 class Config:
     # Telegram Configuration
