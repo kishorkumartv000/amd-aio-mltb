@@ -127,8 +127,15 @@ The new features are managed through a simple, interactive menu.
 
 2.  **Configure Your Upload Destination:**
     *   **Set Default Uploader:** In the settings panel, you will see a button to "Set Default Uploader". You can choose between `Telegram`, `Google Drive`, and `Rclone`. This choice is saved on a per-user basis.
-    *   **Configure Google Drive:** Click "GDrive Settings", and the bot will ask you to upload your `token.pickle` file. This file authorizes the bot to upload to your Google Drive. You can create it using the `generate_drive_token.py` script.
-    *   **Configure Rclone:** Click "Rclone Settings", and the bot will ask you to upload your `rclone.conf` file, which contains your Rclone remote configurations.
+    *   **Configure Google Drive:** Click "GDrive Settings" for more options:
+        *   `Upload token.pickle`: Authorize the bot to upload to your Google Drive.
+        *   `Set Folder ID`: Specify a default Google Drive folder ID for all your uploads and commands.
+        *   `Set Index URL`: Provide an index link if you use one.
+        *   `Toggle Stop Duplicate`: Enable or disable checking for duplicate files before uploading.
+    *   **Configure Rclone:** Click "Rclone Settings" for more options:
+        *   `Upload rclone.conf`: Provide your Rclone configuration file.
+        *   `Set Destination`: Set a default destination path for Rclone uploads (e.g., `my_remote:path/to/folder`).
+        *   `Set Rclone Flags`: Add custom flags for your Rclone operations (e.g., `--drive-chunk-size 128M`).
 
 3.  **Download as Usual:**
     *   Once you have configured your preferred uploader, simply use the `/download` command as you normally would.
@@ -317,6 +324,8 @@ This build is Apple Music–only. Qobuz, Tidal, and Deezer integrations have bee
     ```
 - /clone <gdrive_link>: Copy a file or folder within Google Drive.
 - /count <gdrive_link>: Count the files and folders in a Google Drive path.
+- /gsearch <keyword>: Search for a file or folder in Google Drive.
+- /gddel <gdrive_link>: Delete a file or folder from Google Drive.
 
 ### Core Settings Panel
 
@@ -410,6 +419,8 @@ cancel - Cancel a running task by ID
 cancel_all - Cancel all your running tasks
 clone - Copy a file/folder in Google Drive
 count - Count files/folders in a Google Drive path
+gsearch - Search for a file/folder in Google Drive
+gddel - Delete a file/folder from Google Drive
 config - Config help for Apple Music YAML
 config_show - Show config values (or specific keys)
 config_get - Get a single config value
