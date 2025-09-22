@@ -1,3 +1,4 @@
+import os
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
@@ -38,7 +39,10 @@ async def _get_gdrive_settings_payload(user_id: int):
     if stop_duplicate is None:
         stop_duplicate = Config.STOP_DUPLICATE
 
+    token_status = "Present" if os.path.exists("token.pickle") else "Not Uploaded"
+
     text = (f"**Google Drive Settings**\n\n"
+            f"**Token Status:** `{token_status}`\n"
             f"**GDrive Folder ID:** `{gdrive_id}`\n"
             f"**Index URL:** `{index_url}`\n"
             f"**Stop Duplicate:** `{'Enabled' if stop_duplicate else 'Disabled'}`")
@@ -65,7 +69,10 @@ async def _get_rclone_settings_payload(user_id: int):
     rclone_dest = rclone_dest or Config.RCLONE_DEST or "Not Set"
     rclone_flags = rclone_flags or Config.RCLONE_FLAGS or "Not Set"
 
+    rclone_conf_status = "Present" if os.path.exists("rclone.conf") else "Not Uploaded"
+
     text = (f"**Rclone Settings**\n\n"
+            f"**Config Status:** `{rclone_conf_status}`\n"
             f"**Current Destination:** `{rclone_dest}`\n"
             f"**Rclone Flags:** `{rclone_flags}`")
 
@@ -174,22 +181,28 @@ async def handle_config_uploads(client: Client, message: Message):
 
     user_id = message.from_user.id
     reply_text = message.reply_to_message.text
-    is_blob = False
-    setting_value = ""
 
+    # --- File-based settings ---
     if "rclone.conf" in reply_text:
-        if not message.document: return
-        setting_name = "rclone_config"
-        setting_value = (await message.download(in_memory=True)).read()
-        is_blob = True
-        success_message = "✅ `rclone.conf` has been saved."
-    elif "token.pickle" in reply_text:
-        if not message.document: return
-        setting_name = "gdrive_token"
-        setting_value = (await message.download(in_memory=True)).read()
-        is_blob = True
-        success_message = "✅ `token.pickle` has been saved."
-    elif "Google Drive Folder ID" in reply_text:
+        if not message.document or message.document.file_name != 'rclone.conf':
+            await message.reply_text("Please upload the file named `rclone.conf`.")
+            return
+        await message.download(file_name="rclone.conf")
+        await message.reply_text("✅ `rclone.conf` has been saved to the working directory.")
+        return # Done with this handler
+
+    if "token.pickle" in reply_text:
+        if not message.document or message.document.file_name != 'token.pickle':
+            await message.reply_text("Please upload the file named `token.pickle`.")
+            return
+        await message.download(file_name="token.pickle")
+        await message.reply_text("✅ `token.pickle` has been saved to the working directory.")
+        return # Done with this handler
+
+    # --- Database settings ---
+    setting_name = ""
+    setting_value = ""
+    if "Google Drive Folder ID" in reply_text:
         if not message.text: return
         setting_name = "gdrive_id"
         setting_value = message.text.strip()
@@ -212,8 +225,8 @@ async def handle_config_uploads(client: Client, message: Message):
     else:
         return
 
-    if setting_value:
-        user_set_db.set_user_setting(user_id, setting_name, setting_value, is_blob=is_blob)
+    if setting_name and setting_value:
+        user_set_db.set_user_setting(user_id, setting_name, setting_value, is_blob=False)
         await message.reply_text(success_message)
     else:
         await message.reply_text("❌ No value received.")
