@@ -32,9 +32,11 @@ async def _get_gdrive_settings_payload(user_id: int):
     index_url, _ = user_set_db.get_user_setting(user_id, 'index_url')
     stop_duplicate, _ = user_set_db.get_user_setting(user_id, 'stop_duplicate')
 
-    if not gdrive_id: gdrive_id = Config.GDRIVE_ID or "Not Set"
-    if not index_url: index_url = "Not Set"
-    if stop_duplicate is None: stop_duplicate = True
+    # Fallback to config values if not set by the user
+    gdrive_id = gdrive_id or Config.GDRIVE_ID or "Not Set"
+    index_url = index_url or Config.INDEX_URL or "Not Set"
+    if stop_duplicate is None:
+        stop_duplicate = Config.STOP_DUPLICATE
 
     text = (f"**Google Drive Settings**\n\n"
             f"**GDrive Folder ID:** `{gdrive_id}`\n"
@@ -59,8 +61,9 @@ async def _get_rclone_settings_payload(user_id: int):
     rclone_dest, _ = user_set_db.get_user_setting(user_id, 'rclone_dest')
     rclone_flags, _ = user_set_db.get_user_setting(user_id, 'rclone_flags')
 
-    if not rclone_dest: rclone_dest = Config.RCLONE_PATH or "Not Set"
-    if not rclone_flags: rclone_flags = "Not Set"
+    # Fallback to config values if not set by the user
+    rclone_dest = rclone_dest or Config.RCLONE_DEST or "Not Set"
+    rclone_flags = rclone_flags or Config.RCLONE_FLAGS or "Not Set"
 
     text = (f"**Rclone Settings**\n\n"
             f"**Current Destination:** `{rclone_dest}`\n"
