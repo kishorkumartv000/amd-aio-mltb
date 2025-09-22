@@ -27,6 +27,5 @@ class CMD(object):
     BAN = ["ban", f"ban@{bot}"]
     AUTH = ["auth", f"auth@{bot}"]
     LOG = ["log", f"log@{bot}"]
-    UPLOADERSETTINGS = ["uploadersettings", f"uploadersettings@{bot}", "usettings", f"usettings@{bot}", "uplodersettings", f"uplodersettings@{bot}"]
 
 cmd = CMD()

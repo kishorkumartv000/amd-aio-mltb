@@ -1,7 +1,6 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
-from bot import CMD
 from ..helpers.database.pg_impl import user_set_db
 from config import Config
 
@@ -77,9 +76,7 @@ async def _get_rclone_settings_payload(user_id: int):
     return text, buttons
 
 
-from bot import cmd
-
-@Client.on_message(filters.command(cmd.UPLOADERSETTINGS))
+@Client.on_message(filters.command(["uploadersettings", "usettings", "uplodersettings"]))
 async def uploader_settings_command(client: Client, message: Message):
     """Main command to access uploader settings."""
     text, buttons = await _get_main_settings_payload(message.from_user.id)
