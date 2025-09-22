@@ -65,3 +65,5 @@ class Bot(Client):
         for client in bot_set.clients:
             await client.session.close()
         LOGGER.info('BOT : Exited Successfully!')
+
+aio = Bot()
