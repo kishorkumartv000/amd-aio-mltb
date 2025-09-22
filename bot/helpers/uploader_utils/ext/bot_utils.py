@@ -10,7 +10,7 @@ from asyncio import (
     sleep,
 )
 
-bot_loop = get_event_loop()
+from ..... import bot_loop # Import the global event loop
 from config import Config
 # from ..tg_helper.button_build import ButtonMaker
 # from .telegraph_helper import telegraph
