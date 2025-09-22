@@ -750,6 +750,35 @@ def default_metadata(file_path):
         'thumbnail': None
     }
 
+SIZE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"]
+
+def get_readable_file_size(size_in_bytes):
+    if not size_in_bytes:
+        return "0B"
+
+    index = 0
+    while size_in_bytes >= 1024 and index < len(SIZE_UNITS) - 1:
+        size_in_bytes /= 1024
+        index += 1
+
+    return f"{size_in_bytes:.2f}{SIZE_UNITS[index]}"
+
+
+def get_readable_time(seconds: int):
+    result = ""
+    periods = [
+        ('d', 86400),
+        ('h', 3600),
+        ('m', 60),
+        ('s', 1)
+    ]
+
+    for period_name, period_seconds in periods:
+        if seconds >= period_seconds:
+            period_value, seconds = divmod(seconds, period_seconds)
+            result += f"{int(period_value)}{period_name}"
+    return result or "0s"
+
 
 async def create_apple_zip(directory: str, user_id: int, metadata: dict, progress: Optional[ProgressReporter] = None, cancel_event: asyncio.Event | None = None) -> str:
     """
