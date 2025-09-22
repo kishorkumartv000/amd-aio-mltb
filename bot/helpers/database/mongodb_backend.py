@@ -153,6 +153,17 @@ class MongoDatabase(DatabaseInterface):
 
         self._db_name = db_name
 
+        # Ping the server to confirm the connection and auth are valid before proceeding
+        try:
+            self._client.admin.command('ping')
+            # Use the main logger instance from the bot
+            from bot.logger import LOGGER
+            LOGGER.info(f"Successfully connected to MongoDB. Using database: '{db_name}'")
+        except Exception as e:
+            from bot.logger import LOGGER
+            LOGGER.critical(f"Failed to connect to MongoDB. Please check your DATABASE_URL and MONGODB_DATABASE settings. Error: {e}")
+            exit(1)
+
         self.settings = MongoSettingsRepo(self._client, self._db_name)
         self.history = MongoHistoryRepo(self._client, self._db_name)
         self.user_settings = MongoUserSettingsRepo(self._client, self._db_name)

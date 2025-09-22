@@ -32,14 +32,19 @@ class UploaderListener:
 # --- Upload Destination Implementations ---
 
 async def gdrive_upload(user, path, name):
-    """Upload files via Google Drive, respecting global and user settings."""
-    from .database.pg_impl import user_set_db
+    """Upload files via Google Drive using the global token.pickle."""
+    from .database.pg_impl import db
     from .uploader_utils.gdrive.upload import GoogleDriveUpload
 
     user_id = user['user_id']
 
+    # Check if token.pickle exists
+    if not os.path.exists("token.pickle"):
+        await send_message(user, "❌ **`token.pickle` not found!**\nPlease upload it via the Uploader Settings menu.")
+        return
+
     # Get destination folder ID, falling back to global config
-    gdrive_id, _ = user_set_db.get_user_setting(user_id, 'gdrive_id')
+    gdrive_id, _ = db.user_settings.get_user_setting(user_id, 'gdrive_id')
     gdrive_id = gdrive_id or Config.GDRIVE_ID
     if not gdrive_id:
         await send_message(user, "❌ **GDrive Folder ID not set!**\nPlease set it in Uploader Settings or in the bot's environment variables.")
@@ -48,62 +53,39 @@ async def gdrive_upload(user, path, name):
     listener = UploaderListener(user, path, name)
     listener.up_dest = gdrive_id  # Set destination for the uploader class
 
-    user_temp_path = os.path.join(Config.LOCAL_STORAGE, str(user_id), "gdrive_creds")
-    os.makedirs(user_temp_path, exist_ok=True)
-    token_file_path = os.path.join(user_temp_path, "token.pickle")
-
-    # Decide auth method: Service Accounts (global) or token.pickle (user)
+    # Decide auth method: Service Accounts (global) or token.pickle (global)
     if Config.USE_SERVICE_ACCOUNTS:
-        # The helper library uses this prefix to trigger SA logic
         listener.up_dest = f"sa:{gdrive_id}"
-        token_file_path = None  # Not needed for Service Accounts
+        token_path = None  # Service accounts are handled by the helper
     else:
-        _, token_blob = user_set_db.get_user_setting(user_id, 'gdrive_token')
-        if not token_blob:
-            await send_message(user, "❌ **GDrive token not found!**\nPlease upload your `token.pickle` file in Uploader Settings.")
-            return
-        with open(token_file_path, 'wb') as f:
-            f.write(token_blob)
+        token_path = "token.pickle"
 
     try:
-        # The GoogleDriveUpload class will handle the rest based on listener.up_dest
-        uploader = GoogleDriveUpload(listener, path, token_path=token_file_path)
+        uploader = GoogleDriveUpload(listener, path, token_path=token_path)
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, uploader.upload)
-    finally:
-        shutil.rmtree(user_temp_path, ignore_errors=True)
+    except Exception as e:
+        LOGGER.error(f"GDrive upload failed: {e}")
+        await send_message(user, f"❌ **GDrive Upload Failed!**\n\n**Error:** {e}")
 
 
 async def rclone_upload(user, path, name):
-    """Upload files via Rclone using the advanced uploader."""
-    from .database.pg_impl import user_set_db
+    """Upload files via Rclone using the global rclone.conf."""
+    from .database.pg_impl import db
     from .uploader_utils.rclone.transfer import RcloneTransferHelper
 
     user_id = user['user_id']
 
-    # Fetch user's rclone.conf
-    _, rclone_blob = user_set_db.get_user_setting(user_id, 'rclone_config')
-    if not rclone_blob:
-        # Fallback to global rclone config if user-specific one not found
-        if Config.RCLONE_CONFIG and os.path.exists(Config.RCLONE_CONFIG):
-            with open(Config.RCLONE_CONFIG, 'rb') as f:
-                rclone_blob = f.read()
-        else:
-            await send_message(user, "❌ **Rclone config not found!**\nPlease upload `rclone.conf` in Uploader Settings or set `RCLONE_CONFIG` path in bot's environment.")
-            return
-
-    user_temp_path = os.path.join(Config.LOCAL_STORAGE, str(user_id), "rclone_creds")
-    os.makedirs(user_temp_path, exist_ok=True)
-    rclone_conf_path = os.path.join(user_temp_path, "rclone.conf")
-
-    with open(rclone_conf_path, 'wb') as f:
-        f.write(rclone_blob)
+    # Check if rclone.conf exists
+    if not os.path.exists("rclone.conf"):
+        await send_message(user, "❌ **`rclone.conf` not found!**\nPlease upload it via the Uploader Settings menu.")
+        return
 
     # Fetch destination and flags, falling back to global config
-    rclone_dest, _ = user_set_db.get_user_setting(user_id, 'rclone_dest')
+    rclone_dest, _ = db.user_settings.get_user_setting(user_id, 'rclone_dest')
     rclone_dest = rclone_dest or Config.RCLONE_DEST
 
-    rclone_flags, _ = user_set_db.get_user_setting(user_id, 'rclone_flags')
+    rclone_flags, _ = db.user_settings.get_user_setting(user_id, 'rclone_flags')
     rclone_flags = rclone_flags or Config.RCLONE_FLAGS
 
     if not rclone_dest:
@@ -115,7 +97,8 @@ async def rclone_upload(user, path, name):
     listener.rc_flags = rclone_flags  # Set flags for the helper to use
 
     try:
-        uploader = RcloneTransferHelper(listener, config_path=rclone_conf_path)
+        # The helper will use the rclone.conf from the working directory
+        uploader = RcloneTransferHelper(listener, config_path="rclone.conf")
         await uploader.upload(path)
 
         # After a successful upload, construct remote_info and send the manage button
