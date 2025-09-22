@@ -65,8 +65,18 @@ async def gdrive_upload(user, path, name):
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, uploader.upload)
     except Exception as e:
-        LOGGER.error(f"GDrive upload failed: {e}")
+        LOGGER.error(f"GDrive upload failed: {e}", exc_info=True)
         await send_message(user, f"❌ **GDrive Upload Failed!**\n\n**Error:** {e}")
+    finally:
+        # This cleanup runs regardless of success or failure of the upload.
+        LOGGER.info(f"GDrive uploader cleaning up path: {path}")
+        if os.path.isdir(path):
+            shutil.rmtree(path, ignore_errors=True)
+        elif os.path.exists(path):
+            try:
+                os.remove(path)
+            except:
+                pass
 
 
 async def rclone_upload(user, path, name):
@@ -113,9 +123,19 @@ async def rclone_upload(user, path, name):
                 'is_dir': is_directory
             }
             await _post_rclone_manage_button(user, remote_info)
-
+    except Exception as e:
+        LOGGER.error(f"Rclone upload failed: {e}", exc_info=True)
+        await send_message(user, f"❌ **Rclone Upload Failed!**\n\n**Error:** {e}")
     finally:
-        shutil.rmtree(user_temp_path, ignore_errors=True)
+        # This cleanup runs regardless of success or failure of the upload.
+        LOGGER.info(f"Rclone uploader cleaning up path: {path}")
+        if os.path.isdir(path):
+            shutil.rmtree(path, ignore_errors=True)
+        elif os.path.exists(path):
+            try:
+                os.remove(path)
+            except:
+                pass
 
 async def _telegram_upload(user, metadata, content_type, index=None, total=None):
     """Helper function to handle all Telegram uploads."""
@@ -211,17 +231,8 @@ async def upload_item(user, metadata, content_type, index=None, total=None):
     else: # Default to Telegram
         await _telegram_upload(user, metadata, content_type, index, total)
 
-    # Cleanup should be handled by the final uploader function
-    if uploader != 'telegram':
-        if os.path.isdir(path):
-            shutil.rmtree(path, ignore_errors=True)
-        else:
-            try:
-                os.remove(path)
-                if metadata.get('thumbnail'):
-                    os.remove(metadata['thumbnail'])
-            except:
-                pass
+    # Cleanup is now handled by the individual uploader functions (gdrive_upload, rclone_upload)
+    # to ensure self-contained and reliable behavior.
 
 
 # --- Original Upload Functions (Refactored) ---
