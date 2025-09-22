@@ -5,11 +5,12 @@ from concurrent.futures import ThreadPoolExecutor
 from asyncio import (
     create_subprocess_exec,
     create_subprocess_shell,
+    get_event_loop,
     run_coroutine_threadsafe,
     sleep,
 )
 
-from bot import bot_loop
+bot_loop = get_event_loop()
 from config import Config
 # from ..tg_helper.button_build import ButtonMaker
 # from .telegraph_helper import telegraph
