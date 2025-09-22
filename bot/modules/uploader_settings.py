@@ -77,7 +77,9 @@ async def _get_rclone_settings_payload(user_id: int):
     return text, buttons
 
 
-@Client.on_message(filters.command(["uploadersettings", "usettings", "uplodersettings"], prefixes=CMD))
+from bot import cmd
+
+@Client.on_message(filters.command(cmd.UPLOADERSETTINGS))
 async def uploader_settings_command(client: Client, message: Message):
     """Main command to access uploader settings."""
     text, buttons = await _get_main_settings_payload(message.from_user.id)
