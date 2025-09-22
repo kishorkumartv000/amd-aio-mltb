@@ -399,7 +399,7 @@ async def rclone_dest_path_select_here_cb(client, cb:CallbackQuery):
         await rclone_panel_cb(client, cb)
 
 
-@Client.on_callback_query(filters.regex(pattern=r"^upload"))
+@Client.on_callback_query(filters.regex(pattern=r"^upload$"))
 async def upload_mode_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
         modes = ['Local', 'Telegram']
