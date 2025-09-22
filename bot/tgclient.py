@@ -18,7 +18,6 @@ from .modules import (
     start,
     telegram_setting,
     tidal_ng_settings,
-    uploader_settings,
     gdrive_commands,
 )
 
