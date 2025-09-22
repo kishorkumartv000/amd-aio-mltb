@@ -59,6 +59,7 @@ class Config:
     # Rclone Configuration
     RCLONE_CONFIG     = getenv("RCLONE_CONFIG")                            # Path or URL to rclone.conf
     RCLONE_DEST       = getenv("RCLONE_DEST")                              # e.g. "remote:AppleMusic"
+    INDEX_LINK        = getenv("INDEX_LINK")                               # Optional: index base URL (Legacy)
     RCLONE_FLAGS      = getenv("RCLONE_FLAGS")                             # Custom rclone flags
     RCLONE_SERVE_URL  = getenv("RCLONE_SERVE_URL")                         # URL for rclone serve
     RCLONE_SERVE_PORT = int(getenv("RCLONE_SERVE_PORT", 8080))             # Port for rclone serve

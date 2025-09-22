@@ -34,7 +34,7 @@ async def _get_gdrive_settings_payload(user_id: int):
 
     # Fallback to config values if not set by the user
     gdrive_id = gdrive_id or Config.GDRIVE_ID or "Not Set"
-    index_url = index_url or Config.INDEX_URL or "Not Set"
+    index_url = index_url or Config.INDEX_URL or Config.INDEX_LINK or "Not Set"
     if stop_duplicate is None:
         stop_duplicate = Config.STOP_DUPLICATE
 
