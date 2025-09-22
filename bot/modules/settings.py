@@ -592,10 +592,11 @@ async def main_menu_cb(client, cb:CallbackQuery):
 @Client.on_callback_query(filters.regex(pattern=r"^uploaderPanel"))
 async def uploader_panel_cb(client, cb:CallbackQuery):
     if await check_user(cb.from_user.id, restricted=True):
-        from .uploader_settings import uploader_settings_command
-        # We need to "send" a new message, so we pass the callback's message object
-        await uploader_settings_command(client, cb.message)
-        await cb.message.delete() # delete the old settings panel
+        from .uploader_settings import _get_main_settings_payload
+        # Get the payload using the correct user_id from the callback
+        text, buttons = await _get_main_settings_payload(cb.from_user.id)
+        # Edit the message in place for a better UX
+        await edit_message(cb.message, text, buttons)
 
 @Client.on_callback_query(filters.regex(pattern=r"^close"))
 async def close_cb(client, cb:CallbackQuery):
