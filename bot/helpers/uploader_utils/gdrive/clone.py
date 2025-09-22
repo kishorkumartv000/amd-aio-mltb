@@ -99,7 +99,7 @@ class GoogleDriveClone(GoogleDriveHelper):
                 msg = "File not found."
             else:
                 msg = f"Error.\n{err}"
-            async_to_sync(self.listener.on_clone_error, msg)
+            async_to_sync(self.listener.on_upload_error, msg)
             return None, None, None, None, None
 
     def _clone_folder(self, folder_name, folder_id, dest_id):

@@ -11,14 +11,6 @@ project_root = os.path.dirname(current_dir)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-import asyncio
-
-# --- Global Vars ---
-bot_loop = asyncio.get_event_loop()
-task_dict_lock = asyncio.Lock()
-task_dict = {}
-# --------------------
-
 from config import Config
 
 bot = Config.BOT_USERNAME
